@@ -1,9 +1,13 @@
 import { https, setGlobalOptions, logger } from 'firebase-functions/v2';
-import * as express from 'express';
+import express, { Request, Response } from 'express';
 
 setGlobalOptions({ region: 'europe-west1' });
 
-export const endpoint = https.onRequest((request: express.Request, response: express.Response) => {
-  logger.info('Function called');
+const app = express();
+
+app.get('/', (request: Request, response: Response) => {
+  logger.info(`Function called from ${request.url}`);
   response.status(200).send('Function called');
 });
+
+export const endpoint = https.onRequest(app);
