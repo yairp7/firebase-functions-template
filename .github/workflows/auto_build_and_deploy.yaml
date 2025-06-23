@@ -21,8 +21,8 @@ jobs:
       - name: select environment
         id: select-environment
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "environment=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "environment=development" >> $GITHUB_OUTPUT
           else
             if [ "${{ github.ref_name }}" == "dev" ]; then
               echo "environment=staging" >> $GITHUB_OUTPUT
