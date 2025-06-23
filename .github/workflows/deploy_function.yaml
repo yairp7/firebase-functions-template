@@ -1,0 +1,99 @@
+name: Deployment
+run-name: ${{ github.actor }} started deployment
+
+on:
+  workflow_call:
+    inputs:
+      function_path:
+        type: string
+        required: true
+      environment:
+        type: string
+        required: true
+        default: staging
+      staging_firebase_project_id:
+        type: string
+        required: true
+      production_firebase_project_id:
+        type: string
+        required: true
+
+jobs:
+  print-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: print
+        run: |
+          echo "function_path=${{ inputs.function_path }}"
+          echo "environment=${{ inputs.environment }}"
+          echo "staging_firebase_project_id=${{ inputs.staging_firebase_project_id }}"
+          echo "production_firebase_project_id=${{ inputs.production_firebase_project_id }}"
+
+  deploy-function:
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_APPLICATION_CREDENTIALS: google-application-credentials.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+          
+      - name: Set Up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Firebase CLI
+        shell: bash
+        run: npm install -g firebase-tools
+  
+      - name: Verify Firebase CLI Installation
+        run: firebase --version
+
+      - name: Deployed Function Info
+        run: echo "The function being deployed is ${{ inputs.function_path }}"
+
+      - name: cache npm dependencies
+        id: cache-npm
+        uses: actions/cache@v3
+        with:
+          path: ${{ matrix.function_path }}/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
+      - if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
+        name: Install Dependencies
+        working-directory: ./${{ inputs.function_path }}
+        shell: bash
+        run: npm ci
+
+      - name: Create Credentials
+        working-directory: ./${{ inputs.function_path }}
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING_BASE64 }}" | base64 --decode > google-application-credentials.json
+
+      - name: Deploy Staging
+        if: inputs.environment == 'staging'
+        working-directory: ./${{ inputs.function_path }}
+        shell: bash
+        run: |
+          firebase use ${{ inputs.staging_firebase_project_id }} --debug
+          firebase deploy --only functions:${{ inputs.function_path }} --non-interactive --debug
+          echo "is_deployed=$(echo $?)" >> $GITHUB_OUTPUT
+      
+      - name: Remove Credentials
+        working-directory: ./${{ inputs.function_path }}
+        run: |
+          rm google-application-credentials.json
+
+      - name: Deploy Production
+        if: inputs.environment == 'production'
+        working-directory: ./${{ inputs.function_path }}
+        shell: bash
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRODUCTION_BASE64 }}" | base64 --decode > service-account.json
+          firebase use ${{ inputs.production_firebase_project_id }} --debug
+          firebase deploy --only functions:${{ inputs.function_path }} --non-interactive --debug
+          echo "is_deployed=$(echo $?)" >> $GITHUB_OUTPUT
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: service-account.json

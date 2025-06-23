@@ -1,0 +1,94 @@
+name: Tests, Build and Deploy
+run-name: ${{ github.actor }} has pushed new code
+
+on: 
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        required: true
+        options:
+          - staging
+          - production
+        default: staging
+      function_path:
+        type: choice
+        required: true
+        options:
+          - sample-function
+          # You can add more functions here
+      is_deploy:
+        type: choice
+        required: true
+        options:
+          - true
+          - false
+        default: false
+
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+        default: staging
+      function_path:
+        type: string
+        required: true
+      is_deploy:
+        type: string
+        required: true
+        default: false
+
+jobs:
+  lint-and-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: cache npm dependencies
+        id: cache-npm
+        uses: actions/cache@v3
+        with:
+          path: ${{ inputs.function_path }}/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+        
+      - if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
+        name: install dependencies
+        working-directory: ./${{ inputs.function_path }}
+        run: npm ci
+
+      - name: linter
+        working-directory: ./${{ inputs.function_path }}
+        run: npm run lint
+
+      - name: tests
+        working-directory: ./${{ inputs.function_path }}
+        run: npm test
+
+      - name: build
+        working-directory: ./${{ inputs.function_path }}
+        run: npm run build
+
+  results:
+    needs: ["lint-and-tests"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: print
+        run: echo "${{ needs.lint-and-tests.result }}"
+
+  deploy:
+    if: ${{ contains(join(needs.lint-and-tests.result, ','), 'success') && inputs.is_deploy == 'true' }}
+    needs: ["lint-and-tests"]
+    uses: ./.github/workflows/deploy_function.yaml
+    secrets: inherit
+    with:
+      function_path: ${{ inputs.function_path }}
+      environment: ${{ inputs.environment }}
+      staging_firebase_project_id: ${{ vars.STAGING_FIREBASE_PROJECT_ID }}
+      production_firebase_project_id: ${{ vars.PRODUCTION_FIREBASE_PROJECT_ID }}

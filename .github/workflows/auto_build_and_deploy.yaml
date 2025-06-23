@@ -1,0 +1,63 @@
+name: Tests, Build and Deploy (Auto)
+run-name: ${{ github.actor }} has pushed new code
+
+on: 
+  push:
+    branches:
+      - main
+      - dev
+
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - '*'
+
+jobs:
+  environment-selector:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.select-environment.outputs.environment }}
+    steps:
+      - name: select environment
+        id: select-environment
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "environment=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+          else
+            if [ "${{ github.ref_name }}" == "dev" ]; then
+              echo "environment=staging" >> $GITHUB_OUTPUT
+            elif [ "${{ github.ref_name }}" == "main" ]; then
+              echo "environment=production" >> $GITHUB_OUTPUT
+            else
+              echo "environment=development" >> $GITHUB_OUTPUT
+              echo "No need to deploy - only dev and main branches are allowed"
+            fi
+          fi
+
+  is-deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      is_deploy: ${{ steps.is-deploy.outputs.is_deploy }}
+    steps:
+      - name: is-deploy
+        id: is-deploy
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "is_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-deploy:
+    needs: ["environment-selector", "is-deploy"]
+    uses: ./.github/workflows/build_and_deploy.yaml
+    secrets: inherit
+    strategy:
+      matrix:
+        function_path:
+          - sample-function
+          # You can add more functions here
+    with:
+      function_path: ${{ matrix.function_path }}
+      environment: ${{ needs.environment-selector.outputs.environment }}
+      is_deploy: ${{ needs.is-deploy.outputs.is_deploy == 'true' }}

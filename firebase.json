@@ -1,0 +1,26 @@
+{
+  "projects": [
+    "your-project-id"
+  ],
+  "functions": [
+    {
+      "source": "sample-function",
+      "codebase": "sample-function",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local",
+        "jest.config.js",
+        ".npmrc",
+        ".gitignore",
+        ".eslintrc.js"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint",
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ]
+}
